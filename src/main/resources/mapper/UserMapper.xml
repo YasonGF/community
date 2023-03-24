@@ -43,7 +43,7 @@
 
 <!--    int updatePassword(int id, String password);-->
     <update id="updatePassword">
-        update `user` set `password` = #{passowrd} where `id` = #{id};
+        update `user` set `password` = #{password} where `id` = #{id};
     </update>
 
 </mapper>

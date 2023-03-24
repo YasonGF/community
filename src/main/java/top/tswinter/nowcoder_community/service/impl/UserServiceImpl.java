@@ -6,7 +6,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
+import top.tswinter.nowcoder_community.entity.LoginTicket;
 import top.tswinter.nowcoder_community.entity.User;
+import top.tswinter.nowcoder_community.mapper.LoginTicketMapper;
 import top.tswinter.nowcoder_community.mapper.UserMapper;
 import top.tswinter.nowcoder_community.service.UserService;
 import top.tswinter.nowcoder_community.util.CommunityConstant;
@@ -22,6 +24,8 @@ import java.util.Random;
 public class UserServiceImpl implements UserService, CommunityConstant {
     @Autowired
     private UserMapper userMapper;
+    @Autowired
+    private LoginTicketMapper ticketMapper;
     @Autowired
     private MailClient mailClient;
     @Autowired
@@ -81,7 +85,7 @@ public class UserServiceImpl implements UserService, CommunityConstant {
         user.setCreateTime(new Date());
         userMapper.insertUser(user);
 
-        user=userMapper.selectByEmail(user.getEmail());     // 获取自增长的id
+        user = userMapper.selectByEmail(user.getEmail());     // 获取自增长的id
 
         // 发送邮件
         Context context = new Context();
@@ -99,13 +103,72 @@ public class UserServiceImpl implements UserService, CommunityConstant {
 
     public int activation(int userId, String code) {
         User user = userMapper.selectById(userId);
-        if(user.getStatus() == 1) {
+        if (user.getStatus() == 1) {
             return ACTIVATION_REPEAT;
         }
-        if(user.getActivationCode().equals(code)) {
+        if (user.getActivationCode().equals(code)) {
             userMapper.updateStatus(userId, 1);     // status=1,成功激活
             return ACTIVATION_SUCCESS;
         }
         return ACTIVATION_FAIL;
+    }
+
+    @Override
+    public Map<String, Object> login(String username, String password, long expiredSec) {
+        Map<String, Object> map = new HashMap<>();
+
+        if (!StringUtils.hasText(username)) {
+            map.put("usernameMsg", "账号不能为空！");
+            return map;
+        }
+
+        if (!StringUtils.hasText(password)) {
+            map.put("passwordMsg", "密码不能为空！");
+            return map;
+        }
+
+        User user = userMapper.selectByName(username);
+        if (user == null) {
+            map.put("usernameMsg", "该账号不存在！");
+            return map;
+        }
+        if (user.getStatus() == 0) {
+            map.put("usernameMsg", "该账号未激活！");
+            return map;
+        }
+        password = CommunityUtil.MD5(password + user.getSalt());
+        if (!password.equals(user.getPassword())) {
+            map.put("passwordMsg", "密码不正确！");
+            return map;
+        }
+
+//        生成登录凭证
+        LoginTicket loginTicket = new LoginTicket();
+        loginTicket.setUserId(user.getId());
+        loginTicket.setStatus(0);       // 0:有效
+        loginTicket.setTicket(CommunityUtil.generateUUID());
+        loginTicket.setExpired(new Date(System.currentTimeMillis() + expiredSec * 1000));
+        ticketMapper.insertLoginTicket(loginTicket);
+        map.put("ticket", loginTicket.getTicket());
+        return map;
+    }
+
+    @Override
+    public void logout(String ticket) {
+        ticketMapper.updateStatus(ticket, 1);   // 1表示登录状态失效
+    }
+
+    @Override
+    public LoginTicket findLoginTicket(String ticket) {
+        return  ticketMapper.selectByTicket(ticket);
+    }
+    @Override
+    public int updateHeader(int userId, String headerUrl){
+        return userMapper.updateHeader(userId, headerUrl);
+    }
+
+    @Override
+    public int updatePassword(int userId, String pwd) {
+        return userMapper.updatePassword(userId, pwd);
     }
 }

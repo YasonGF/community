@@ -2,8 +2,10 @@ package top.tswinter.nowcoder_community.controller;
 
 import com.google.code.kaptcha.Producer;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 import top.tswinter.nowcoder_community.config.KaptchaConfig;
 import top.tswinter.nowcoder_community.entity.User;
@@ -12,6 +14,7 @@ import top.tswinter.nowcoder_community.util.CommunityConstant;
 
 import javax.imageio.ImageIO;
 import javax.servlet.ServletOutputStream;
+import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.awt.*;
@@ -33,6 +36,11 @@ public class LoginController implements CommunityConstant {
     @GetMapping("/login")
     public String getLoginPage() {
         return "/site/login";
+    }
+
+    @GetMapping("/forget")
+    public String getForgetPage() {
+        return "/site/forget";
     }
 
     @PostMapping("/register")
@@ -90,6 +98,55 @@ public class LoginController implements CommunityConstant {
             throw new RuntimeException(e);
         }
     }
+    @Value("${server.servlet.context-path}")
+    private String contextPath;
+
+    @PostMapping("/login")
+    public String xx(String username, String password, String code, boolean remember,
+                     Model model, HttpSession session, HttpServletResponse resp) {
+
+        String kaptcha = (String) session.getAttribute("kaptcha");
+        if(!StringUtils.hasText(kaptcha) || !StringUtils.hasText(code) || !kaptcha.equalsIgnoreCase(code)) {
+            model.addAttribute("codeMsg", "验证码错误！！！");
+            return "/site/login";
+        }
+
+       int expiredSec = remember ? REMEMBER_EXPIRED_SECONDS:DEFAULT_EXPIRED_SECONDS;
+
+        Map<String, Object> map = userService.login(username, password, expiredSec);
+        if(map.containsKey("ticket")){
+            Cookie cookie = new Cookie("ticket", map.get("ticket").toString());
+            cookie.setPath(contextPath);
+            cookie.setMaxAge(expiredSec);
+            resp.addCookie(cookie);
+            return "redirect:/index";
+        }
+        model.addAttribute("usernameMsg", map.get("usernameMsg"));
+        model.addAttribute("passwordMsg", map.get("passwordMsg"));
+        return "/site/login";
+
+    }
+
+    @PostMapping("/forget")
+    public String forget() {
+
+        return "";
+    }
+
+    @GetMapping("/logout")
+    public String logout(@CookieValue("ticket") String ticket) {
+        userService.logout(ticket);
+
+        return "redirect:/login";
+    }
+
+    @GetMapping("/sendVerifyCode")
+    @ResponseBody
+    public void sendVerifyCode(String email) {
+        System.out.println(email);
+    }
+
+
 
 
 
